@@ -9,7 +9,6 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
-import kweimann.mezzure.controller.ChangeListener;
 import kweimann.mezzure.view.Mezzure;
 import kweimann.mezzure.view.MezzureConfiguration;
 

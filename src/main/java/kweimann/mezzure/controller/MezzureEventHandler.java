@@ -51,7 +51,7 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
                 clearBlankIntervals();
                 dc.clear(interval);
                 intervals.remove(interval);
-                paintBlankIntervals();
+                drawBlankIntervals();
                 if (listener != null)
                     listener.onChange(interval, null);
             }
@@ -72,7 +72,7 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
                 }
                 intervals.add(next);
                 dc.draw(next);
-                paintBlankIntervals();
+                drawBlankIntervals();
                 if (listener != null && !next.equals(prev))
                     listener.onDrag(prev, next);
             }
@@ -110,6 +110,14 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
         return intervals;
     }
 
+    public void addInterval(Interval interval) {
+        if (overlaps(interval) != null) throw new IllegalArgumentException("overlapping intervals illegal");
+        clearBlankIntervals();
+        intervals.add(interval);
+        dc.draw(interval);
+        drawBlankIntervals();
+    }
+
     private void clearBlankIntervals() {
         for (Window<Interval> window : Collections.slideWindow(intervals, 2)) {
             Interval interval = new Interval(window.get(0).end(), window.get(1).start());
@@ -117,7 +125,7 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
         }
     }
 
-    private void paintBlankIntervals() {
+    private void drawBlankIntervals() {
         for (Window<Interval> window : Collections.slideWindow(intervals, 2)) {
             Interval interval = new Interval(window.get(0).end(), window.get(1).start());
             dc.addText(interval);
@@ -169,9 +177,9 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
         return selection;
     }
 
-    private Interval overlaps(Point point) {
+    private Interval overlaps(Element1D element) {
         for (Interval interval : intervals)
-            if (interval.overlaps(point)) return interval;
+            if (interval.overlaps(element)) return interval;
         return null;
     }
 
