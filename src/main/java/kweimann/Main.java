@@ -9,6 +9,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
+import kweimann.mezzure.controller.ChangeListener;
 import kweimann.mezzure.view.Mezzure;
 import kweimann.mezzure.view.MezzureConfiguration;
 
@@ -64,8 +65,13 @@ public class Main extends Application {
                 0,
                 configuration.sectionWidth() * sectionCount);
 
+        MezzureEventHandler handler = new MezzureEventHandler(mezzure.getDrawingContext());
+
+        // listen for interval changes
+        handler.setListener(((oldInterval, newInterval) -> System.out.println(oldInterval + " -> " + newInterval)));
+
         // set up the event handler
-        mezzure.addEventHandler(MouseEvent.ANY, new MezzureEventHandler(mezzure.getDrawingContext()));
+        mezzure.addEventHandler(MouseEvent.ANY, handler);
 
         // set up the interval labeling function
         mezzure.setDescriptor(e -> e instanceof Interval

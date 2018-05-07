@@ -25,6 +25,8 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
     // sorted set of currently visible intervals
     private SortedSet<Interval> intervals = new TreeSet<>(Comparator.comparing(Interval::start));
 
+    private ChangeListener listener;
+
     public MezzureEventHandler(DrawingContext dc) {
         this.dc = dc;
     }
@@ -38,15 +40,20 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
             Point dragStart = getPosition(event);
             if (dragStart != null) dragEvent = getDragEvent(dragStart);
         } else if (event.getEventType() == MouseEvent.MOUSE_RELEASED && dragEvent != null) {
+            if (listener != null && dragEvent.result() != null && !dragEvent.result().equals(dragEvent.origin()))
+                listener.onChange(dragEvent.origin(), dragEvent.result());
             dragEvent = null;
         } else if (event.getEventType() == MouseEvent.MOUSE_CLICKED && event.getClickCount() == 2) {
             Point position = getPosition(event);
             Interval interval;
             if (position != null && (interval = overlaps(position)) != null) {
+                // remove selected interval
                 clearBlankIntervals();
                 dc.clear(interval);
                 intervals.remove(interval);
                 paintBlankIntervals();
+                if (listener != null)
+                    listener.onChange(interval, null);
             }
         } else if (dragEvent != null) {
             // when fitToBorder is true a point is always available
@@ -66,6 +73,8 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
                 intervals.add(next);
                 dc.draw(next);
                 paintBlankIntervals();
+                if (listener != null && !next.equals(prev))
+                    listener.onDrag(prev, next);
             }
         }
 
@@ -91,6 +100,14 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
                 dc.setCursor(Cursor.DEFAULT);
             }
         }
+    }
+
+    public void setListener(ChangeListener listener) {
+        this.listener = listener;
+    }
+
+    public Iterable<Interval> getIntervals() {
+        return intervals;
     }
 
     private void clearBlankIntervals() {
@@ -215,6 +232,7 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
 
     private interface DragEvent {
         Interval updated(Point dragEnd);
+        Interval origin();
         Interval result();
     }
 
@@ -245,6 +263,11 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
 
             interval = adjustIntervalOnOverlap(origin.move(displacement), dragEnd);
             return interval;
+        }
+
+        @Override
+        public Interval origin() {
+            return origin;
         }
 
         @Override
@@ -314,12 +337,14 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
 
         private final Point dragStart;
         private final Interval dragSpace;
+        private final Interval origin;
 
         private Interval interval;
 
         IntervalResize(Point dragStart, Interval dragSpace, Interval origin) {
             this.dragStart = dragStart;
             this.dragSpace = dragSpace;
+            this.origin = origin;
             this.interval = origin;
         }
 
@@ -329,6 +354,11 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
             if (!dragStart.equals(dragEnd))
                 interval = new Interval(dragStart, dragEnd);
             return interval;
+        }
+
+        @Override
+        public Interval origin() {
+            return origin;
         }
 
         @Override
