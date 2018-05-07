@@ -1,18 +1,22 @@
-package kweimann.mezzure;
+package kweimann.mezzure.controller;
 
 import javafx.event.EventHandler;
 import javafx.scene.Cursor;
 import javafx.scene.input.MouseEvent;
+import kweimann.mezzure.model.Element1D;
+import kweimann.mezzure.model.Interval;
+import kweimann.mezzure.model.Point;
+import kweimann.mezzure.util.Collections;
+import kweimann.mezzure.util.Window;
+import kweimann.mezzure.view.DrawingContext;
 
 import java.util.*;
 
-import static kweimann.mezzure.IntervalsUtil.*;
-
-public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
+public final class MezzureEventHandler implements EventHandler<MouseEvent> {
     private static final int intervalToleranceSpan = 10;
     private static final int pointToleranceSpan = 10;
 
-    private final Painter painter;
+    private final DrawingContext dc;
 
     // current drag event if user is dragging an element
     private DragEvent dragEvent;
@@ -21,8 +25,8 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
     // sorted set of currently visible intervals
     private SortedSet<Interval> intervals = new TreeSet<>(Comparator.comparing(Interval::start));
 
-    public IntervalsEventHandler(Painter painter) {
-        this.painter = painter;
+    public MezzureEventHandler(DrawingContext dc) {
+        this.dc = dc;
     }
 
     @Override
@@ -40,7 +44,7 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
             Interval interval;
             if (position != null && (interval = overlaps(position)) != null) {
                 clearBlankIntervals();
-                painter.clear(interval);
+                dc.clear(interval);
                 intervals.remove(interval);
                 paintBlankIntervals();
             }
@@ -57,10 +61,10 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
                 if (prev != null) {
                     // during the initial phase of creating new interval there is no previous interval yet
                     intervals.remove(prev);
-                    painter.clear(prev);
+                    dc.clear(prev);
                 }
                 intervals.add(next);
-                painter.paint(next);
+                dc.draw(next);
                 paintBlankIntervals();
             }
         }
@@ -74,32 +78,32 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
                 if (selection != null) {
                     clearHoverPosition();
                     if (selection instanceof PointSelection) {
-                        painter.setCursor(Cursor.H_RESIZE);
+                        dc.setCursor(Cursor.H_RESIZE);
                     } else if (selection instanceof IntervalSelection) {
-                        painter.setCursor(Cursor.MOVE);
+                        dc.setCursor(Cursor.MOVE);
                     } else throw new IllegalArgumentException("unknown selection");
                 } else {
                     updateHoverPosition(position);
-                    painter.setCursor(Cursor.DEFAULT);
+                    dc.setCursor(Cursor.DEFAULT);
                 }
             } else {
                 clearHoverPosition();
-                painter.setCursor(Cursor.DEFAULT);
+                dc.setCursor(Cursor.DEFAULT);
             }
         }
     }
 
     private void clearBlankIntervals() {
-        for (List<Interval> window : Util.slideWindow(intervals, 2)) {
+        for (Window<Interval> window : Collections.slideWindow(intervals, 2)) {
             Interval interval = new Interval(window.get(0).end(), window.get(1).start());
-            painter.clearText(interval.start());
+            dc.clearText(interval);
         }
     }
 
     private void paintBlankIntervals() {
-        for (List<Interval> window : Util.slideWindow(intervals, 2)) {
+        for (Window<Interval> window : Collections.slideWindow(intervals, 2)) {
             Interval interval = new Interval(window.get(0).end(), window.get(1).start());
-            painter.paintText(Integer.toString(interval.length()), interval.start());
+            dc.addText(interval);
         }
     }
 
@@ -109,25 +113,27 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
 
     private void updateHoverPosition(Point updated) {
         if (lastHoverPosition != null) {
-            painter.clear(lastHoverPosition);
+            dc.clear(lastHoverPosition);
             lastHoverPosition = null;
         }
         if (updated != null) {
             lastHoverPosition = updated;
-            painter.paint(lastHoverPosition);
+            dc.draw(lastHoverPosition);
         }
     }
 
     private Selection getSelection(Point point) {
         Selection selection = null;
 
+        // choose the closest element (relative to the point) that overlaps the point
         for (Interval interval : intervals) {
-            if (interval.overlaps(point) || Util.distance(point, interval) <= intervalToleranceSpan) {
-                Element selected;
+            if (interval.overlaps(point) || point.distance(interval) <= intervalToleranceSpan) {
+                Element1D selected;
 
-                int distanceToStart = Util.distance(interval.start(), point);
-                int distanceToEnd = Util.distance(interval.end(), point);
+                int distanceToStart = interval.start().distance(point);
+                int distanceToEnd = interval.end().distance(point);
 
+                // determine whether to select interval start/end points or the interval itself
                 if (distanceToStart < distanceToEnd && distanceToStart <= pointToleranceSpan) {
                     selected = interval.start();
                 } else if (distanceToStart > distanceToEnd && distanceToEnd <= pointToleranceSpan) {
@@ -136,7 +142,7 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
                     selected = interval;
                 }
 
-                if (selection == null || Util.distance(selection.selected(), point) > Util.distance(selected, point))
+                if (selection == null || selection.selected().distance(point) > selected.distance(point))
                     selection = selected instanceof Interval
                             ? new IntervalSelection((Interval) selected)
                             : new PointSelection((Point) selected, interval);
@@ -157,7 +163,7 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
     }
 
     private Point getPosition(MouseEvent event, boolean fitToBorder) {
-        return point((int) event.getX(), (int) event.getY(), fitToBorder);
+        return dc.getPoint((int) event.getX(), (int) event.getY(), fitToBorder);
     }
 
     private DragEvent getDragEvent(Point dragStart) {
@@ -171,7 +177,7 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
                 SortedSet<Interval> remainingIntervals = new TreeSet<>(intervals);
                 remainingIntervals.remove(intervalSelection.selected());
 
-                return new IntervalMove(dragStart, intervalSelection.selected(), remainingIntervals);
+                return new IntervalMove(dragStart, intervalSelection.selected(), remainingIntervals, dc);
             } else if (selection instanceof PointSelection) {
                 // resize an existing interval
                 PointSelection pointSelection = (PointSelection) selection;
@@ -188,7 +194,8 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
     }
 
     private IntervalResize getResizeEvent(Point dragStart, Interval origin, Collection<Interval> remainingIntervals) {
-        for (List<Interval> window : Util.slideWindow(remainingIntervals, 2, 1)) {
+        // slide a window over all intervals to find the blank intervals in between
+        for (Window<Interval> window : Collections.slideWindow(remainingIntervals, 2, 1)) {
             Interval dragSpace = getIntervalInBetween(window.get(0), window.get(1));
             if (dragSpace != null && dragSpace.overlaps(dragStart)) {
                 return new IntervalResize(dragStart, dragSpace, origin);
@@ -198,12 +205,10 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
     }
 
     private Interval getIntervalInBetween(Interval prev, Interval next) {
-        Point a = prev == null ? start : prev.end().equals(end) ? end : prev.end().move(1);
-        Point b = next == null ? end : next.start().equals(start) ? start : next.start().move(-1);
+        Point a = prev == null ? dc.getStart() : prev.end().move(1);
+        Point b = next == null ? dc.getEnd() : next.start().move(-1);
 
-        if (a.equals(b)) return null;
-
-        assert a.compareTo(b) < 0;
+        if (a.compareTo(b) >= 0) return null;
 
         return new Interval(a, b);
     }
@@ -218,25 +223,27 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
         private final Point dragStart;
         private final Interval origin;
         private final Collection<Interval> remainingIntervals;
+        private final DrawingContext gc;
 
         private Interval interval;
 
-        IntervalMove(Point dragStart, Interval origin, Collection<Interval> remainingIntervals) {
+        IntervalMove(Point dragStart, Interval origin, Collection<Interval> remainingIntervals, DrawingContext gc) {
             this.dragStart = dragStart;
             this.origin = origin;
             this.remainingIntervals = remainingIntervals;
+            this.gc = gc;
             this.interval = origin;
         }
 
         @Override
         public Interval updated(Point dragEnd) {
-            int distance = dragStart.distance(dragEnd);
+            int displacement = dragStart.displacement(dragEnd);
 
-            distance = distance < 0
-                    ? Math.max(distance, origin.start().distance(start))    // move left
-                    : Math.min(distance, origin.end().distance(end));       // move right
+            displacement = displacement < 0
+                    ? Math.max(displacement, origin.start().displacement(gc.getStart()))    // move left
+                    : Math.min(displacement, origin.end().displacement(gc.getEnd()));       // move right
 
-            interval = adjustIntervalOnOverlap(origin.move(distance), dragEnd);
+            interval = adjustIntervalOnOverlap(origin.move(displacement), dragEnd);
             return interval;
         }
 
@@ -246,40 +253,60 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
         }
 
         private Interval adjustIntervalOnOverlap(Interval updated, Point dragEnd) {
-            for (List<Interval> window : Util.slideWindow(remainingIntervals, 3, 1)) {
-                Interval interval = window.get(1);
+            Interval overlapping = getClosestOverlappingInterval(updated);
 
-                if (interval.overlaps(updated)) {
-                    // choose where to move `updated` based on the cursor's position relative to overlapping interval's center
-                    if (interval.center().compareTo(dragEnd) > 0) {
-                        Interval prev = window.get(0);
-                        Point lastLeftSpot = prev == null ? start : prev.end().move(1);
+            if (overlapping != null) {
+                for (Window<Interval> window : Collections.slideWindow(remainingIntervals, 3, 1)) {
+                    Interval interval = window.get(1);
 
-                        // check if `updated` fits in the space on interval's left
-                        if (lastLeftSpot.distance(interval.start()) > updated.length()) {
-                            // move `updated` left
-                            return new Interval(interval.start().move(-updated.length() - 1, true),
-                                    interval.start().move(-1, false));
+                    if (interval.equals(overlapping)) {
+                        // choose where to move `updated` based on the cursor's position relative to overlapping interval's center
+                        if (interval.center() > dragEnd.center()) {
+                            Interval prev = window.get(0);
+                            Point lastLeftSpot = prev == null ? gc.getStart() : prev.end().move(1);
+
+                            // check if `updated` fits in the space on interval's left
+                            if (lastLeftSpot.displacement(interval.start()) > updated.length()) {
+                                // move `updated` left
+                                return new Interval(interval.start().move(-updated.length() - 1), interval.start().move(-1));
+                            }
+                        } else {
+                            Interval next = window.get(2);
+                            Point lastRightSpot = next == null ? gc.getEnd() : next.start().move(-1);
+
+                            // check if `updated` fits in the space on interval's right
+                            if (interval.end().displacement(lastRightSpot) > updated.length()) {
+                                // move `updated` right
+                                return new Interval(interval.end().move(updated.length() + 1), interval.end().move(1));
+                            }
                         }
-                    } else {
-                        Interval next = window.get(2);
-                        Point lastRightSpot = next == null ? end : next.start().move(-1);
 
-                        // check if `updated` fits in the space on interval's right
-                        if (interval.end().distance(lastRightSpot) > updated.length()) {
-                            // move `updated` right
-                            return new Interval(interval.end().move(updated.length() + 1, false),
-                                    interval.end().move(1, true));
-                        }
+                        // no viable spot could be found so don't update interval at all
+                        return this.interval;
                     }
-
-                    // no viable spot could be found so don't update interval at all
-                    return this.interval;
                 }
             }
 
             // `updated` does not overlap with any interval so allow the update
             return updated;
+        }
+
+        private Interval getClosestOverlappingInterval(Interval updated) {
+            Interval overlapping = null;
+
+            for (Interval interval : remainingIntervals) {
+                if (interval.overlaps(updated)
+                        && (overlapping == null || distance(overlapping.center(), updated.center())
+                        > distance(interval.center(), updated.center()))) {
+                    overlapping = interval;
+                }
+            }
+
+            return overlapping;
+        }
+
+        private static int distance(int a, int b) {
+            return Math.abs(b - a);
         }
     }
 
@@ -317,7 +344,7 @@ public final class IntervalsEventHandler implements EventHandler<MouseEvent> {
     }
 
     private interface Selection {
-        Element selected();
+        Element1D selected();
     }
 
     private static class IntervalSelection implements Selection {
