@@ -110,12 +110,26 @@ public final class MezzureEventHandler implements EventHandler<MouseEvent> {
         return intervals;
     }
 
-    public void addInterval(Interval interval) {
-        if (overlaps(interval) != null) throw new IllegalArgumentException("overlapping intervals illegal");
-        clearBlankIntervals();
-        intervals.add(interval);
-        dc.draw(interval);
-        drawBlankIntervals();
+    public boolean addInterval(Interval interval) {
+        if (overlaps(interval) == null) {
+            clearBlankIntervals();
+            intervals.add(interval);
+            dc.draw(interval);
+            drawBlankIntervals();
+            return true;
+        }
+        return false;
+    }
+
+    public boolean removeInterval(Interval interval) {
+        if (intervals.contains(interval)) {
+            clearBlankIntervals();
+            intervals.remove(interval);
+            dc.clear(interval);
+            drawBlankIntervals();
+            return true;
+        }
+        return false;
     }
 
     private void clearBlankIntervals() {
